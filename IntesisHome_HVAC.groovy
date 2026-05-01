@@ -1,5 +1,5 @@
 /**
- *  Intesis HVAC 0.5-clean-ui
+ *  Intesis HVAC 0.6-single-setpoint
  *
  * Author: ERS
  *       based off device work by Martin Blomgren
@@ -33,7 +33,7 @@
  */
 //file:noinspection unused
 //file:noinspection SpellCheckingInspection
-static String version() {"v0.5-clean-ui"}
+static String version() {"v0.6-single-setpoint"}
 
 import groovy.transform.Field
 import groovy.json.JsonSlurper
@@ -100,8 +100,6 @@ metadata {
 		command "setSingleSetpoint", [[name:"temperature*", type:"NUMBER", description:"Set MHI single setpoint"]]
 		command "setThermostatMode", [[name:"mode*", type:"ENUM", constraints:["off","auto","heat","cool","dry","fan"]]]
 		command "setThermostatFanMode", [[name:"mode*", type:"ENUM", constraints:["auto","on"]]]
-		command "setHeatingSetpoint", [[name:"temperature*", type:"NUMBER", description:"Alias for MHI single setpoint"]]
-		command "setCoolingSetpoint", [[name:"temperature*", type:"NUMBER", description:"Alias for MHI single setpoint"]]
 
 	}
 
@@ -172,6 +170,7 @@ static Map getCOMMAND_MAP() {
 
 void initialize() {
 	debug("initialize", "")
+	cleanupLegacySetpointStates()
 	setModes()
 }
 
@@ -443,9 +442,11 @@ void updateOperatingState() {
 }
 
 void updateSingleSetpointEvents(value, String myUnit) {
+	// MHI exposes one setpoint only. Do not emit heatingSetpoint/coolingSetpoint,
+	// because Hubitat will keep rendering separate hot/cold controls if these states exist.
 	sendEvent(name: "thermostatSetpoint", value: value, unit: myUnit)
-	sendEvent(name: "heatingSetpoint", value: value, unit: myUnit)
-	sendEvent(name: "coolingSetpoint", value: value, unit: myUnit)
+	sendEvent(name: "mhiSetpoint", value: value, unit: myUnit)
+	cleanupLegacySetpointStates()
 }
 
 void setPointAdjust(Double value) {
@@ -461,18 +462,15 @@ void setPointAdjust(Double value) {
 	parent.sendMsg(message)
 }
 
+void cleanupLegacySetpointStates() {
+	// Remove old states left behind by earlier Thermostat-capability versions.
+	// This is safe to ignore on hubs/firmware where deleteCurrentState is unavailable.
+	try { device.deleteCurrentState("heatingSetpoint") } catch(e) { debug("cleanupLegacySetpointStates", "heatingSetpoint cleanup skipped: ${e.message}") }
+	try { device.deleteCurrentState("coolingSetpoint") } catch(e) { debug("cleanupLegacySetpointStates", "coolingSetpoint cleanup skipped: ${e.message}") }
+}
+
 void setSingleSetpoint(Double value) {
 	info("setSingleSetpoint","to: $value")
-	setPointAdjust(value)
-}
-
-void setHeatingSetpoint(Double value) {
-	info("setHeatingSetpoint","to: $value")
-	setPointAdjust(value)
-}
-
-void setCoolingSetpoint(Double value) {
-	info("setCoolingSetpoint","to: $value")
 	setPointAdjust(value)
 }
 
